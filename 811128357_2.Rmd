@@ -1,0 +1,374 @@
+---
+title: "KNNClassification"
+Name: Surbhi Khandelwal
+Subject: ML
+Description: Assignment of knn classification to identify which customers are more
+  likely to get Personal Loan based on other personal info.
+---
+
+#Title - KNN Classification
+#Name - Surbhi Khandelwal
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo= TRUE)
+dir.create("images")
+```
+
+# Install Packages
+
+Install packages that you need and call the libraries for them.
+
+```{r message=FALSE}
+#install.packages("caret")
+#install.packages("FNN")
+#install.packages("dummies")
+#install.packages("GGally")
+#install.packages("gmodels")
+library(gmodels)
+library(caret)
+library(e1071)
+library(FNN)
+library(caret )
+library(dplyr)
+library(dummies)
+library(GGally)
+```
+
+
+***
+
+#Load Dataset with removing categorical data
+```{r}
+UniversalBank <- read.csv("C:\\Users\\akash\\Desktop\\Kent - !st Sem\\RPractice\\UniversalBank.csv")
+
+summary(UniversalBank)
+
+
+#Create a dataset with only variables we need. i.e remove ID and zip code
+
+m_UniversalBank <- select(UniversalBank,Age,Experience,Income,Family,CCAvg,Education,Mortgage,Securities.Account,CD.Account,Online, CreditCard,Personal.Loan) 
+
+#Education is a categorical variable so convert it into dummy variables.
+
+m_UniversalBank$Edu_1 <- ifelse(m_UniversalBank$Education == '1', 1, 0)
+m_UniversalBank$Edu_2 <- ifelse(m_UniversalBank$Education == '2', 1, 0)
+m_UniversalBank$Edu_3 <- ifelse(m_UniversalBank$Education == '3', 1, 0)
+
+m_UniversalBank<-subset(m_UniversalBank,select=c(-Education))
+
+#Check how the dataset looks like.
+
+names(m_UniversalBank)
+head(m_UniversalBank)
+
+#Just to make sure that Personal.Loan is at the end of the database.
+
+m_UniversalBank <- select(m_UniversalBank,Age,Experience,Income,Family,CCAvg,Mortgage,Securities.Account,CD.Account,Online, CreditCard,Edu_1,Edu_2,Edu_3,Personal.Loan) 
+```
+
+
+#Let's see the relation between Personal Loan and other variables.
+```{r plot}
+library(ggplot2)
+ggplot(m_UniversalBank, aes(x=Income, y=CD.Account ,color=Personal.Loan)) +
+  geom_point() 
+
+#It shows that a person with CD Account and higher Income has Personal Loan.
+
+str(m_UniversalBank)
+```
+
+#Data Partitioning
+```{r part}
+#Partition data 60% train and 40% validation
+
+set.seed(15)
+Valid_Index = createDataPartition(m_UniversalBank$Personal.Loan,p=0.4, list=FALSE) # 40% reserved for Validation
+Valid_Data = m_UniversalBank[Valid_Index,]
+Train_Data = m_UniversalBank[-Valid_Index,] # Validation and Training data is rest
+
+summary(Train_Data)
+summary(Valid_Data)
+```
+
+
+#Data Normalisation
+```{r norm}
+
+# Copy the original data into dataset where you will perform normalisation.
+train.norm.df <- Train_Data
+valid.norm.df <- Valid_Data
+
+# use preProcess() from the caret package to normalize Age, 
+#Perform normalisation
+
+## Normalise only variables with quantitave
+
+norm.values <- preProcess(Train_Data[, c(1:6)], method=c("center", "scale"))
+
+train.norm.df[, c(1:6)] <- predict(norm.values, Train_Data[, c(1:6)])
+# Replace all columns with normalized values
+valid.norm.df[, c(1:6)] <- predict(norm.values, Valid_Data[, c(1:6)])
+
+#summary(train.norm.df)
+var(train.norm.df[, c(1:6)])
+#summary(valid.norm.df)
+var(valid.norm.df[, c(1:6)])
+```
+
+
+#Prediction using k-NN
+```{r}
+dim(train.norm.df)
+dim(valid.norm.df)
+
+Train_Predictors<-train.norm.df[,c(1:13)] 
+Valid_Predictors<-valid.norm.df[,c(1:13)]
+
+Train_labels <-train.norm.df[,14] 
+Valid_labels  <-valid.norm.df[,14] 
+
+#The actual knn algorithm
+set.seed(15)
+pred.new <- knn(train= Train_Predictors , test= Valid_Predictors, 
+                    cl = Train_labels, k = 1, prob = TRUE)
+head(pred.new)
+#row.names(Train_Data)[attr(pred.new, "nn.index")]
+```
+
+#Confusion Matrix
+```{r valuek}
+
+
+#See the value for the Confusion Matrix
+CrossTable(x=Valid_labels,y=pred.new, prop.chisq = FALSE)
+```
+
+This matrix shows the following: If Yes is positive, then the misclassifications are 18 false positives, and 67 false negatives. We can identify several measures based on this table. For example
+
+* Accuracy = Number correctly identified / Total = (135 + 1780) / 2000 = .95
+* Recall is the true positive rate or sensitivity = 135/135+ 67 = .66
+* Precision is the positive predictive value = 135 / (18 + 135) = 0.88
+* Specificity, also called as the true negative rate = 1780 / 1847 = .92
+
+In simple terms, high precision means that an algorithm returned substantially more relevant (positive) results than irrelevant (negative) ones, while high recall means that an algorithm returned most of the relevant (positive) results. 
+
+
+#Adding data of the customer we want to predict for and normalising it.
+```{r newrecord}
+summary(Train_Data)
+
+#Check what the algorithm predicts for the observation mentioned.
+
+new_obs <- c(40, 10,84, 2, 2, 0,0 , 0,1,1,0,1,0)
+
+
+new_obs1 <- as.data.frame(t(new_obs[1:6]))
+colnames(new_obs1) <- c('Age','Experience','Income','Family','CCAvg','Mortgage')
+#Normalise this new observation
+
+new_obs1<-(new_obs1-norm.values$mean)/norm.values$std
+
+new_obs1
+
+
+#To get the same dimensions
+
+new_obs_comp<- c(new_obs1$Age,new_obs1$Experience, new_obs1$Income, new_obs1$Family,new_obs1$CCAvg,new_obs1$Mortgage, new_obs[7],new_obs[8],new_obs[9], new_obs[10], new_obs[11], new_obs[12],new_obs[13])
+
+new_obs_comp
+
+new_obs_comp1<-new_obs_comp #Saving the values for the next time.
+new_obs_comp2<-new_obs_comp #Saving the value for future use.
+
+#Finally Predicitng the value of Personal.loan
+set.seed(15)
+pred.new.cust1 <- knn (train= Train_Predictors, test= new_obs_comp,  
+                    cl = Train_labels, k = 1, prob = TRUE)
+
+head(pred.new.cust1)
+
+
+#So this person will not take a loan. This customer will be classified as a person who does not takes personal loan.
+
+```
+
+#Now we have to create a confusion matrix for different values of k Hypertuning
+
+```{r kpred}
+set.seed(15)
+accuracy.df <- data.frame(k = seq(1, 14, 1), accuracy = rep(0, 14))
+
+for(j in 1:14) {
+  knn.pred <- knn(train = Train_Predictors, test = Valid_Predictors, 
+                  cl = Train_labels, k = j)
+  accuracy.df[j, 2] <- confusionMatrix(knn.pred , as.factor(Valid_labels))$overall[1] 
+}
+accuracy.df
+
+
+```
+
+#We see that the best accuracy is when k=3.
+#Our accuracy keeps increasing till we get k=3, so till then we were underfitting our model and after k=3, we are overfitting the model.
+
+```{r knew}
+
+#Let's try and predict if our customer will take a personal loan or not if k=3
+set.seed(15)
+pred.new.cust2 <- knn (train= Train_Predictors, test= new_obs_comp1,  
+                    cl = Train_labels, k = 3, prob = TRUE)
+
+head(pred.new.cust2)
+
+#The customer is still not taking personal loan.
+
+```
+#2nd Part of the problem - Repartitioning the data
+
+```{r repartition}
+#Let's repartition the data into train, validation, and test sets in the ratio 50%:30%:20%
+
+set.seed(15)
+Test1_Index = createDataPartition(m_UniversalBank$Personal.Loan,p=0.2, list=FALSE) # 20% reserved for Test
+Test1_Data = m_UniversalBank[Test1_Index,]
+TraVal_Data = m_UniversalBank[-Test1_Index,] # Validation and Training data is rest
+
+Train1_Index = createDataPartition(TraVal_Data$Personal.Loan,p=0.5, list=FALSE) # 80% of remaining data as training
+Train1_Data = TraVal_Data[Train1_Index,]
+Validation1_Data = TraVal_Data[-Train1_Index,] # rest as validation
+
+summary(Train1_Data$Income)
+summary(Validation1_Data$Income)
+summary(Test1_Data$Income)
+
+
+```
+#Normalising the data
+```{r normal}
+# Copy the original data into dataset where you will perform normalisation.
+train.norm.df1 <- Train1_Data
+valid.norm.df1 <- Validation1_Data
+traval.norm.df1 <- TraVal_Data
+test.norm.df1 <- Test1_Data
+
+# use preProcess() from the caret package to normalize Age, 
+#Perform normalisation
+
+norm.values1 <- preProcess(Train1_Data[, c(1:6)], method=c("center", "scale"))
+
+
+train.norm.df1[, 1:6] <- predict(norm.values1, Train1_Data[, 1:6])
+valid.norm.df1[, 1:6] <- predict(norm.values1, Validation1_Data[, 1:6])
+
+#Here we are normalising again with train+valid data set for the test set.
+norm.values2 <- preProcess(TraVal_Data[, c(1:6)], method=c("center", "scale"))
+
+
+#Normalise the Train+Valid i.e Traval data as well.
+traval.norm.df1[, 1:6] <- predict(norm.values2, traval.norm.df1[, 1:6])
+test.norm.df1[, 1:6] <- predict(norm.values2, Test1_Data[, 1:6])
+
+#summary(train.norm.df1)
+var(train.norm.df1[, 1:6])
+#summary(valid.norm.df1)
+var(valid.norm.df1[, 1:6])
+
+
+```
+#Now we predict for the validation set.
+
+```{r}
+
+Train_Predictors1<-train.norm.df1[,c(1:13)] 
+Valid_Predictors1<-valid.norm.df1[,c(1:13)]
+Traval_Predictors1<- traval.norm.df1[,c(1:13)]
+Test_Predictors1<-test.norm.df1[,c(1:13)]
+
+Train_labels1 <-train.norm.df1[,14] 
+Valid_labels1  <-valid.norm.df1[,14] 
+Traval_labels1 <- traval.norm.df1[,14]
+Test_labels1<-test.norm.df1[,14]
+
+#The actual knn algorithm for valid data using k=3 as that's where I got high accuracy
+set.seed(15)
+pred.new_k <- knn(train= Train_Predictors1 , test= Valid_Predictors1, 
+                    cl = Train_labels1, k = 1, prob = TRUE)
+head(pred.new_k)
+
+summary(pred.new_k)
+```
+
+
+#ADD CONFUSION MATRIX WITH ACCURACY AND FIND K
+
+```{r confk}
+set.seed(15)
+accuracy.df1 <- data.frame(k = seq(1, 14, 1), accuracy = rep(0, 14))
+
+for(j in 1:14) {
+  knn.pred_new_k <- knn(train = Train_Predictors1, test = Valid_Predictors1, 
+                  cl = Train_labels1, k = j)
+  accuracy.df1[j, 2] <- confusionMatrix(knn.pred_new_k , as.factor(Valid_labels1))$overall[1] 
+}
+accuracy.df1
+
+```
+#As per the Confusion Matrix and Accuracy data, we get K=1 has best accuracy.
+
+#Predict for the Test Set
+```{r}
+#We have already normalised the data for Test (Train+Valid)
+#Predicting for the test set with k=1 as that has the highest accuracy.
+
+set.seed(15)
+knn.pred.new <- knn(train = Traval_Predictors1, test =  Test_Predictors1, 
+                    cl = Traval_labels1, k = 1)
+
+head(knn.pred.new)
+summary(knn.pred.new)
+
+```
+
+
+
+#Now let's take a look at the difference in confusion matrix and compare test set with that of the training and validation sets.
+
+```{r confmat}
+#Confusion Matrix for Validation set.
+CrossTable(x=Valid_labels1,y= pred.new_k, prop.chisq = FALSE)
+
+
+#Confusion matrix for the test set
+
+CrossTable(x=Test_labels1,y=knn.pred.new, prop.chisq = FALSE)
+```
+
+
+
+#DIFFERENCE BETWWEN CONFUSION MATRIX FOR VALIDATION AND TEST SET:
+#For Validation
+#Accuracy  = Number correctly identified / Total = (136 + 1779) / 2000 = .95
+#* Recall is the true positive rate or sensitivity = 136/136+ 67 = .67
+#* Precision is the positive predictive value = 136 / (18 + 136) = 0.88
+#* Specificity, also called as the true negative rate = 1779 / 1846 = .92
+#For Test
+#Accuracy = Number correctly identified / Total = (65 + 897) / 1000 = .96
+#* Recall is the true positive rate or sensitivity = 65/65+ 31 = .67
+#* Precision is the positive predictive value = 65 / (8 + 65) = 0.89
+#* Specificity, also called as the true negative rate = 896 / 927 = .96
+
+
+
+#So we see that our accuracy has increased but other objective functions havent changed much.
+
+#Let's try and test again for our customer.
+```{r custag}
+set.seed(15)
+pred.new.cust2 <- knn (train= Test_Predictors1, test= new_obs_comp2,  
+                    cl = Test_labels1, k = 1, prob = TRUE)
+head(pred.new.cust2)
+
+#It still says that our customer will not take a personal loan.
+
+```
