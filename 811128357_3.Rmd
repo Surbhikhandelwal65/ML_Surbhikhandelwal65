@@ -1,0 +1,212 @@
+---
+title: "Naive Bayes Assignment"
+Name: "Surbhi Khandelwal"
+Description: "Naive Bayes Classification for Airlines company to check if the flights are on-time or not."
+output: html_document
+---
+
+### The purpose of this assignment is to use Naive Bayes for classification. Here we will:
+#### • Use Naive Bayes classification to complete the task.
+#### • Make predictions from your model. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Loading all the libraries we will need for the classification.
+
+
+```{r message=FALSE}
+library(caret)
+library(ISLR)
+library(e1071)  
+library(gmodels)
+library(dplyr)
+library(naivebayes)
+library(corrplot)
+library(car)
+library(pROC)
+library(epiDisplay)
+```
+
+
+### Loading the dataset and then choosing just the data we need for our classification.
+
+```{r}
+
+rm(list = ls(all=T))
+
+
+FlightData <- read.csv("C:\\Users\\akash\\Desktop\\Kent - !st Sem\\RPractice\\FlightDelays.csv")
+
+# Database we need.
+
+FlightData_f <- dplyr::select(FlightData, DAY_WEEK, CRS_DEP_TIME, ORIGIN, DEST, CARRIER, Flight.Status)
+
+head(FlightData_f)
+```
+
+### Look at the data and check for nulls and look at the summary.
+
+```{r}
+
+colSums(is.na(FlightData_f))
+
+#Let's look at the summary
+str(FlightData_f)
+
+```
+### Looking at the summary we realise that DAY_WEEK, CRS_DEP_TIME and Flight.Status are not in the right format.
+
+## Week and Time variables need to be recoded as factors.
+
+### Create time slots and convert the week and time as factors. Assign delayed and ontime as 1 and 0.
+
+```{r}
+
+FlightData_f$DAY_WEEK<- as.factor(FlightData_f$DAY_WEEK)
+
+FlightData_f$CRS_DEP_TIME <- recode(FlightData_f$CRS_DEP_TIME, "600:630=1;
+       631:700=2;
+       701:730=3;
+       731:800=4;
+       801:830=5;
+       831:900=6;
+       901:930=7;
+       931:1000=8;
+       1001:1030=9;
+       1031:1100=10;
+       1101:1130=11;
+       1131:1200=12;
+       1201:1230=13;
+       1231:1300=14;
+       1301:1330=15;
+       1331:1400=16;
+       1401:1430=17;
+       1431:1500=18;
+       1501:1530=19;
+       1531:1600=20;
+       1601:1630=21;
+       1631:1700=22;
+       1701:1730=23;
+       1731:1800=24;
+       1801:1830=25;
+       1831:1900=26;
+       1901:1930=27;
+       1931:2000=28;
+       2001:2030=29;
+       2031:2100=30;
+       2101:2130=31;
+       2131:2200=32;
+       
+       else=NA")
+
+FlightData_f$CRS_DEP_TIME<- as.factor(FlightData_f$CRS_DEP_TIME)
+
+#Converting Flight.Status into 1 - delayed, 0 - ontime
+
+FlightData_f$Flight.Status [FlightData_f$Flight.Status=='ontime']<-0
+FlightData_f$Flight.Status [FlightData_f$Flight.Status=='delayed']<-1
+
+
+FlightData_f$Flight.Status<-as.factor(FlightData_f$Flight.Status)
+
+
+#Now let's see how the summary looks:
+summary(FlightData_f)
+```
+### Now We Know That All The Data is Categorical.
+
+### Let's plot the histogram now and see what it looks like.
+```{r}
+barplot(table(FlightData_f$CRS_DEP_TIME))
+
+```
+
+# Part 1:Divide the data into 60% training and 40% validation
+```{r}
+
+set.seed(123)
+#Divide data into 40% test and 60% train
+Index_Train<-createDataPartition(FlightData_f$Flight.Status, p=0.6, list=FALSE)
+Train <-FlightData_f[Index_Train,]
+Test  <-FlightData_f[-Index_Train,]
+
+
+```
+
+# Part 2: Now, run the Naive Bayes model, and predict Flight status on the test set
+```{r}
+
+# Build a naïve Bayes classifier
+set.seed(123)
+nb_model <-naiveBayes(Flight.Status~DAY_WEEK+ CRS_DEP_TIME + ORIGIN + DEST + CARRIER,data = Train)
+nb_model
+
+```
+## Here we can see that there is 80% Probability that the flight is ontime and 20% probability that the flight is delayed.
+
+# Predicting the model on test set
+
+```{r}
+set.seed(123)
+Test_labels <-predict(nb_model,Test, type= "raw")
+head(Test_labels)
+
+```
+
+# Part 3 Output both a counts table and a proportion table outlining how many and what proportion of flights were delayed and on-time at each of the three airports.
+
+### Getting the Count Table and Probability Table for Train Set
+```{r}
+
+(table(Train$ORIGIN, Train$Flight.Status))
+
+prop.table((table(Train$ORIGIN, Train$Flight.Status)))
+```
+### We can see that 130 flights that originated from DCA were delayed. 
+
+### The probability of a flight being delayed which originated from DCA is the highest.
+
+### Getting the Count Table and Probability Table for Test Set
+```{r}
+
+(table(Test$ORIGIN, Test$Flight.Status))
+
+prop.table((table(Test$ORIGIN, Test$Flight.Status)))
+```
+### We can see the same trend in our test set.
+
+# Part 4 Output the confusion matrix and ROC for the validation data (test set)
+
+### Let's build the ROC
+```{r}
+
+#Passing the second column of the predicted probabilities 
+#That column contains the probability associated to ‘yes’
+roc(Test$Flight.Status, Test_labels[,2])
+plot.roc(Test$Flight.Status,Test_labels[,2])
+```
+
+### For the CrossTable, we need to Predict again with Type as Class
+```{r}
+
+#Predicting the model on test set with type as class
+set.seed(123)
+Test_labels1 <-predict(nb_model,Test, type= "class")
+head(Test_labels1)
+
+#Building the crosstable for the test set.
+
+set.seed(123)
+CrossTable(x=Test$Flight.Status,y=Test_labels1, prop.chisq = FALSE) 
+```
+
+This matrix shows the following: Delayed is 1 which is our positive and on-time is 0, then the misclassifications are 26 false positives, and 146 false negatives. We can identify several measures based on this table. For example
+
+* Accuracy = Number correctly identified / Total = (683 + 25) / 880 = .80
+* Recall is the true positive rate or sensitivity = 25 / 25+146 = .14
+* Precision is the positive predictive value = 25 / (25 + 26) = 0.49
+* Specificity, also called as the true negative rate = 683 / 829 = .82
