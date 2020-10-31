@@ -1,0 +1,458 @@
+---
+title: "KMeans Assignment"
+Description: KMeans Naive Bayes Classification for Clustering
+output:
+  html_document:
+    df_print: paged
+---
+
+### Surbhi Khandelwal
+
+***
+The dataset on American College and University Rankings contains information on 1302 American colleges and universities offering an undergraduate program. For each university, there are 17 measurements, including continuous measurements (such as tuition and graduation rate) and categorical measurements (such as location by state and whether it is a private or public school).
+Aim - Divide the data into clusters.
+
+```{r setup, include=FALSE, comment=NA, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Loading and installing all the required packages.
+```{r message=FALSE, warning=FALSE, comment=NA}
+library(tidyverse)  # data manipulation
+library(factoextra) # clustering algorithms & visualization
+library(ISLR)
+library(tidyr)
+library(caret)
+library(dplyr)
+library(flexclust)
+library(ggplot2)
+library(esquisse)
+library(hrbrthemes)
+library(GGally)
+library(viridis)
+```
+\newpage
+
+## Data Exploration
+
+```{r}
+
+rm(list = ls(all=T))
+
+Universitydata <- read.csv("C:\\Users\\akash\\Desktop\\Kent - !st Sem\\RPractice\\ML\\Universities.csv")
+```
+
+#Before we answer any questions, let's look at the data and try to understand it.
+```{r data, comments=NA}
+#Studying the structure of the data
+ 
+str(Universitydata)
+
+#Look at the head of the data
+head(Universitydata)
+
+#Look at the summary of the data set
+summary(Universitydata)
+```
+
+\newpage
+
+## Data Preperation
+
+### Part 2
+####For all the continuous measurements, run K-Means clustering. Make sure to normalize the measurements. How many clusters seem reasonable for describing these data? What was your optimal K?
+
+#### First We will do half of Part 2 and then Part 1 i.e Removing all the null values
+
+To do this, let's first divide the data into categorical and continous.
+Categorical Variables - College.Name, State, Public..1...Private..2.
+
+Continous Measurements - X..appli..rec.d, X..appl..accepted, X..new.stud..enrolled, X..new.stud..from.top.10., X..new.stud..from.top.25., X..FT.undergrad, X..PT.undergrad, in.state.tuition, out.of.state.tuition, room, board, add..fees, estim..book.costs, estim..personal.., X..fac..w.PHD, stud..fac..ratio, Graduation.rate
+
+#### Now let's create the dataset with just the continous measurements.
+```{r comments=NA}
+
+Universitydata_train <- select(Universitydata,-College.Name, -State, -Public..1...Private..2.)
+```
+
+
+### Scaling the Data
+
+#### I am scaling the entire dataset without dividing it into train and test because it's an unsupervised model. Since we won't be able to automatically calculate the accuracy/effectiveness of your model. We can only calculate the distance value and understand how our model is doing.
+
+```{r comments=NA}
+# Scaling the data frame (z-score) 
+Universitydata_scaled <- scale(Universitydata_train)
+```
+
+
+### Part 1: Remove all records with missing measurements from the dataset.
+```{r comments=NA}
+#Let's look at the percentage of missing values for each variable in the dataset.
+
+navalues<- colMeans(is.na(Universitydata_scaled))*100
+as.data.frame(navalues)
+
+```
+#### We notice that there are quite a few columns with missing data.
+#### So Let's remove the missing data.
+
+```{r comments =NA}
+#Removing all the null values.
+
+Universitydata_f <- na.omit(Universitydata_scaled)
+```
+
+#### Getting the distance and plotting it out.
+
+```{r}
+
+distance <- get_dist(Universitydata_f)
+fviz_dist(distance)
+```
+
+\newpage
+
+## K Means Implementation
+
+Let us now run the k-means algorithm to cluster the Universities. We will choose an initial value of k = 4.
+
+### Running K-Means for k=4
+
+```{r}
+set.seed(123)
+k4 <- kmeans(Universitydata_f, centers = 4, nstart = 25) # k = 4, number of restarts = 25
+
+# Visualize the output
+
+k4$centers # output the centers
+
+k4$size # Number of Universities in each cluster
+
+fviz_cluster(k4, data = Universitydata_f) # Visualize the output
+```
+\newpage
+
+### Determining the optimum value of k using wss method.
+```{r comments=NA}
+
+fviz_nbclust(Universitydata_f, kmeans, method = "wss")
+```
+### Optimal Value of K=3. Meaning our data can be easily put into 3 clusters.
+
+
+## Silhouette Method
+
+### Let us now apply the Silhouette Method to determine the number of clusters
+```{r}
+fviz_nbclust(Universitydata_f, kmeans, method = "silhouette")
+```
+
+### Even Accoring to this method, Optimal k=3.
+
+\newpage
+
+### Running K-Means for Optimal k=3
+```{r}
+set.seed(123)
+k3 <- kmeans(Universitydata_f, centers = 3, nstart = 25) # k = 3, number of restarts = 25
+
+# Visualize the output
+
+k3$centers # output the centers
+
+k3$size # Number of Universities in each cluster
+
+fviz_cluster(k3, data = Universitydata_f) # Visualize the output
+```
+
+#### Let us now apply the predict function
+```{r}
+#Apply the predict() function
+set.seed(123)
+#kmeans clustering, using manhattan distance
+k3_1 = kcca(Universitydata_f, k=3, kccaFamily("kmedians"))
+
+clusters_index <- predict(k3_1)
+dist(k3_1@centers)
+image(k3_1)
+points(Universitydata_f[9],Universitydata_f[17], col=clusters_index, pch=19, cex=0.3, xlim=c(0,2))
+```
+\newpage
+
+### Part 3 - Compare the summary statistics for each cluster and describe each cluster in this context (e.g., “Universities with high tuition, low acceptance rate...”).
+
+#### To do this I am plotting a number of graphs with few variables in each graph in order to have a good readability and understandability.
+
+```{r comment=NA}
+#Let's create a dataframe which consists of the centers of the three clusters.
+
+ClusterMeanAna <- k3$centers
+clusterval <-c(1,2,3)
+as.factor(clusterval)
+
+tempcluster <- cbind(clusterval,ClusterMeanAna)
+#Now Let's Look At Some Plots.
+#We will plot 4 variables at a time to be able to read and understand them.
+
+#Plotting first 4 variables: applications received, applications accepted, Students enrolled, and students from top 10.
+
+
+ggparcoord(tempcluster,columns = 2:5, groupColumn = 1,
+    title = "Plot of the University Data For First 4 Columns",
+    ) 
+  
+#Applications Received
+#cluster 1 has high no of applications received.
+#Cluster 2 has low no of applications received. 
+#cluster 3 has an avg no of applications received.
+
+#Applications Accepted
+#cluster 1 has high no of applications accepted.
+#Cluster 2 has low no of applications accepted. 
+#cluster 3 has a little higher than Cluster 2.
+
+#Students Enrolled
+#cluster 1 has high no of students enrolled.
+#Cluster 2 has low no of students enrolled. 
+#cluster 3 has an avg no of students enrolled.
+
+#Students from Top 10
+#cluster 1 has avg no of Students from Top 10.
+#Cluster 2 has low no of Students from Top 10. 
+#cluster 3 has the highest no of students from Top 10.
+
+
+#Looking at the next set of plots.
+```
+
+```{r}
+ggparcoord(tempcluster,columns = 6:8, groupColumn = 1,
+    title = "Plot for the University Data for the Next 3 columns",
+    ) 
+
+#Students From Top 25
+#cluster 1 has avg no. of Students from top 25.
+#Cluster 2 has low no of Students from top 25. 
+#cluster 3 has high no of Students from top 25.
+
+#FT Undergrad
+#cluster 1 has high no of Full-time undergrad.
+#Cluster 2 has low no of Full-time undergrad. 
+#cluster 3 has a low Full-time undergrad.
+
+#PT undergrad
+#cluster 1 has high no of Part-time undergrad.
+#Cluster 2 has low no of Part-time undergrad. 
+#cluster 3 has avg no of Part-time undergrad.
+
+#Looking at the next set of plots.
+```
+
+```{r}
+ggparcoord(tempcluster,columns = 9:12, groupColumn = 1,
+    title = "Plot for the University Data for the Next 3 columns",
+    ) 
+
+#In-State Tuition Fee
+#cluster 1 has avg in-state tuition fee.
+#Cluster 2 has low in-state tuition fee. 
+#cluster 3 has a very high in-state tuition fee.
+
+#Out-Of-State Tuition Fee
+#cluster 1 has avg out-of-state-tuition fee.
+#Cluster 2 has low out-of-state-tuition fee. 
+#cluster 3 has a very high out-of-state-tuition fee.
+
+#No. of Rooms
+#cluster 1 has low no of room.
+#Cluster 2 has avg no. of room. 
+#cluster 3 has a very high avg no of room.
+
+#No. of Board Members
+#cluster 1 has low no of board members.
+#Cluster 2 has avg no of board members. 
+#cluster 3 has a very high no of board members.
+
+```
+
+```{r}
+#Looking at the next set of plots.
+
+ggparcoord(tempcluster,columns = 13:15, groupColumn = 1,
+    title = "Plot for the University Data for the Next 3 columns",
+    ) 
+
+#Additional Costs
+#cluster 1 has high additional costs.
+#Cluster 2 has low additional costs. 
+#cluster 3 has a low additional costs.
+
+#Estimated Book Costs
+#cluster 1 has high estimated book cost.
+#Cluster 2 has low estimated book cost. 
+#cluster 3 has average estimated book cost.
+
+#Estimated Personal Cost
+#cluster 1 has high estimated personal cost.
+#Cluster 2 has avg estimated personal cost. 
+#cluster 3 has a low estimated personal cost.
+
+```
+
+```{r}
+#Looking at the next set of plots.
+
+ggparcoord(tempcluster,columns = 16:18, groupColumn = 1,
+    title = "Plot for the University Data for the Next 3 columns",
+    ) 
+
+#Faculty with PHD
+#cluster 1 has high fac with PHD.
+#Cluster 2 has low fac with PHD. 
+#cluster 3 has a high fac with PHD.
+
+#Student Faculty Ratio
+#cluster 1 has high student faculty ratio.
+#Cluster 2 has average student faculty ratio. 
+#cluster 3 has low student faculty ratio.
+
+#Graduation Rate
+#cluster 1 has avg graduation rate.
+#Cluster 2 has low graduation rate. 
+#cluster 3 has a high graduation rate.
+
+
+ggparcoord(tempcluster,columns = 2:17, groupColumn = 1,
+    title = "Plot for All The Variables For an Overview"
+    ) + coord_flip()
+```
+
+### Basically it translates to:
+
+#Cluster 1 contains - Universities with high no of applications received, high acceptance, high enrollment, decent no of students from top 10, decent number of students from top 25, high number of FT and PT undergrad, average in-state and out of state tuiton fee, very few rooms, decent board and high additional fee, book costs and personal expenses. It also has a good number of faculty with PHD, a high student faculty ratio but a avg graduation rate.
+
+#Cluster 2 contains - Universities with few applications, low acceptance, low enrollment, very few students from top 10, very few students from top 25, few number of FT and PT undergrad, low in-state and out of state tuiton fee, very few rooms, small board of members and very low additional fee, book costs and personal expenses. It also has very few faculty with PHD, average student faculty ratio and a very low graduation rate.
+
+#Cluster 3 contains - Universities with average no of applications received, average acceptance, average enrollment, high no of students from top 10, high number of students from top 25, low number of FT and PT undergrad, very high in-state and out of state tuiton fee, very large no. of rooms, big board of members and low additional fee, book costs and personal expenses. It also has a high number of faculty with PHD, a low student faculty ratio and a high graduation rate.
+ 
+\newpage
+
+### Part 4 - Use the categorical measurements that were not used in the analysis (State and Private/Public) to characterize the different clusters. Is there any relationship between the clusters and the categorical information?
+
+#### Creating another dataset with just state and public..1private..2. column and adding clusters also in that dataset to see the relationship between them.
+
+
+```{r comments=NA}
+
+Clusterdata <- Universitydata
+Clusterdata <- na.omit(Clusterdata)
+
+University_cluster <- select(Clusterdata, State, Public..1...Private..2.)
+
+University_cluster <- data.frame(University_cluster,
+  cluster = as.factor(k3$cluster)
+)
+
+```
+
+#### Now let's plot between Public..1Private..2. and Cluster
+
+```{r comments=NA}
+
+ggplot(University_cluster) +
+ aes(x = Public..1...Private..2., fill = cluster) +
+ geom_bar() +
+ scale_fill_hue() +
+ theme_minimal()
+
+```
+
+
+#There is a relationship between the clusters and the categorical information as mentioned above. From my understanding, it looks like:
+#Cluster 1 - Really good Public Universities
+#Cluster 2 - Combination of good Public Universities and average Private Universities.
+#Cluster 3 - Ivy Leagues or huge Private Universities
+
+
+\newpage
+
+#### Now let's plot between State, Cluster and no. of Public and Private Universities.
+
+```{r comments=NA}
+
+ggplot(University_cluster) +
+ aes(x = State, fill = cluster) +
+ geom_bar() +
+ scale_fill_hue() +
+ labs(x = "No. of Colleges in the State", y = "States", subtitle = "Colleges in Each state Based on Public/Private", fill = "Cluster") +
+ theme_minimal() +
+ facet_grid(vars(Public..1...Private..2.), vars())
+
+#Another way to look at this information since states are not visible properly.
+ggplot(University_cluster) +
+ aes(x = Public..1...Private..2., fill = cluster) +
+ geom_bar() +
+ scale_fill_hue() +
+ theme_minimal() +
+ facet_wrap(vars(State))
+
+
+
+```
+
+#Cluster 1 also has Universities mostly in major states.
+#Cluster 2 has universities across almost every state including Wyoming and Alaska
+#Cluster 3 has universities in major states
+
+\newpage
+
+### Part 5 - What other external information can explain the contents of some or all of these clusters?
+
+External Information like State Funding, Size of state, Population of state, Household income of that state can also explain these clusters.
+
+
+### Part 6 - Consider Tufts University, which is missing some information. Compute the Euclidean distance of this record from each of the clusters that you found above (using only the measurements that you have). Which cluster is it closest to? Impute the missing values for Tufts by taking the average of the cluster on those measurements.
+
+
+#### Getting the data we need.
+```{r comments=NA}
+#tufts university is record no 476 is our dataset. This is our test data.
+Universitydata_test <- Universitydata_scaled[476,]
+
+#Let's see what values are null in this record.
+Universitydata_test
+```
+
+#So we need to impute the value of X..PT.undergrad.
+
+#Let's calculate the euclidean distance of this record with all the other clusters.
+#DistMatrix - variable in which we ll store the mean value of all the variables in the three clusters.
+
+```{r comments=NA}
+DistMatrix <- k3$centers
+DistMatrix<- rbind(DistMatrix, Universitydata_test)
+
+#Calculating the euclidean distance of the centeroids with the Tufts University data
+get_dist(DistMatrix, method = "euclidean")
+
+```
+### Here we see that the distance of this record with our 3 clusters is:
+#### Distance from Cluster 1 - 6.845
+#### Distance from Cluster 2 - 6.45
+#### Distance from Cluster 3 - 2.77
+
+## Looking at this, it looks like this record is closest to cluster 3
+
+#### Now we need to calculate the missing data ie X..PT.undergrad by calculating the mean of the records in that cluster
+
+```{r comments=NA}
+
+#So we need to impute the value of X..PT.undergrad with the cluster 3's centroid value of X..PT.undergrad.
+
+Universitydata_test[is.na(Universitydata_test)] <- k3$centers[3,"X..PT.undergrad"]
+
+Universitydata_test
+```
+
+### The Value of X..PT.undergrad that we impute here is -0.477
