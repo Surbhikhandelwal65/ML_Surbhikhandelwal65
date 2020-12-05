@@ -1,0 +1,363 @@
+---
+title: "Hierarchical Assignment"
+Description: Construct a hierarchical clustering model in R and to comment on advantages of that model compared to K-means algorithm.
+output:
+  html_document:
+    df_print: paged
+---
+
+### Surbhi Khandelwal
+
+***
+The dataset Cereals.csv includes nutritional information, store display, and consumer ratings for
+77 breakfast cereals.
+
+```{r setup, include=FALSE, comment=NA, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading and installing all the required packages.
+```{r message=FALSE, warning=FALSE, comment=NA}
+library(tidyverse)  # data manipulation
+library(factoextra) # clustering algorithms & visualization
+library(arsenal)
+library(ISLR)
+library(tidyr)
+library(caret)
+library(dplyr)
+library(flexclust)
+library(ggplot2)
+library(esquisse)
+library(hrbrthemes)
+library(GGally)
+library(dummies)
+library(viridis)
+library(cluster)
+library(geosphere)
+library(raster)
+library(gmodels)
+```
+
+\newpage
+
+Loading the data set.
+```{r}
+
+rm(list = ls(all=T))
+
+Cerealdata <- read.csv("C:\\Users\\akash\\Desktop\\Kent - !st Sem\\RPractice\\ML\\Cereals.csv")
+```
+
+
+### Data Exploration
+
+Before we answer any questions, let's look at the data and try to understand it.
+```{r data, comments=NA}
+#Studying the structure of the data
+str(Cerealdata)
+
+#Look at the head of the data
+head(Cerealdata)
+
+#Look at the summary of the data set
+summary(Cerealdata)
+```
+
+\newpage
+
+### Data Preperation
+Attribute 'shelf' is a categorical variable. Lets convert it into a factor.
+
+```{r}
+Cerealdata$shelf = as.factor(as.character(Cerealdata$shelf))
+```
+
+Convert the names of the breakfast cereals to the row names, as this will later help us in visualising the clusters
+```{r}
+rownames(Cerealdata) <- Cerealdata$name
+
+#Drop the name column as it is now just redundant information
+Cerealdata$name = NULL
+```
+
+### Scaling the Data
+
+I am scaling the entire dataset without dividing it into train and test because it's an unsupervised model. Since we won't be able to automatically calculate the accuracy/effectiveness of your model. We can only calculate the distance value and understand how our model is doing.
+
+
+To do this, let's first divide the data into categorical and continous.
+Categorical Variables -  mfr, type
+
+Continous Measurements - calories, protein, fat, sodium, fiber, carbo, sugars, potass, vitamins, shelf, weight, cups, rating
+
+Now let's create the dataset with just the continous measurements.
+```{r comments=NA}
+
+Cerealdata_cont <- dplyr::select(Cerealdata, -mfr, -type)
+```
+
+Convert the categorical variable Shelf to dummy variables (converting to numeric attributes by using dummy)
+
+```{r messages = FALSE}
+#Make a copy of the dataframe for later use (mixed attributes)
+shelfDummies = data.frame(dummy(Cerealdata_cont$shelf))
+
+#Name the new attributes appropriately
+names(shelfDummies) = c("Shelf1","Shelf2","Shelf3")
+head(shelfDummies)
+```
+
+
+Remove the original attribute 'shelf' and add the newly created dummy variables
+
+```{r}
+Cerealdata_cont$shelf = NULL
+Cerealdata_cont = data.frame(cbind(Cerealdata_cont, shelfDummies))
+
+#check the dataframe using head()
+head(Cerealdata_cont)
+```
+
+\newpage
+
+### Scaling the data frame (z-score) 
+```{r comments=NA}
+Cerealdata_cont <- scale(Cerealdata_cont)
+
+#Let's look at the head of the scaled data
+head(Cerealdata_cont)
+```
+
+### Remove all records with missing measurements from the dataset.
+```{r comments=NA}
+#Let's look at the percentage of missing values for each variable in the dataset.
+
+navalues<- colMeans(is.na(Cerealdata_cont))*100
+as.data.frame(navalues)
+
+```
+We notice that there are a few columns with missing data.
+So Let's remove the missing data.
+
+```{r comments =NA}
+#Removing all the null values.
+
+Cerealdata_cont <- na.omit(Cerealdata_cont)
+```
+
+# Part 1: Apply hierarchical clustering to the data using Euclidean distance to the normalized measurements. Use Agnes to compare the clustering from single linkage, complete linkage, average linkage, and Ward. Choose the best method.
+
+
+Getting the distance and plotting it out.
+
+```{r}
+distance <- get_dist(Cerealdata_cont)
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+```
+### Hierarchical Clustering  
+
+Get agglomerative coefficient for each linkage method and compare all of them together.
+```{r}
+set.seed(123)
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(Cerealdata_cont, method = x)$ac
+}
+
+# get agglomerative coefficient for each linkage method
+purrr::map_dbl(m, ac)
+```
+
+Looking at the agglomerative coefficient for all the linkage methods, we see that ward linkage is the highest.
+
+\newpage
+
+### Hierarchical Clustering procedure using ward.D2   
+
+Let's now perform hierarchical clustering using the hclust() function, for which we'll first need to calculate the distance measures
+
+```{r}
+set.seed(123)
+dist <- dist(Cerealdata_cont, method = "euclidean")
+hc_fit <- hclust(dist, method = "ward.D2")
+```
+
+
+We can display the dendrogram for hierarchical clustering, using the plot() function
+
+```{r, fig.height=8, fig.width=14}
+plot(hc_fit)
+```
+
+
+### Part 3: How many clusters would you choose?
+
+Looking at the plot, it looks like 6 could be a good value for no. of clusters. It looks like cutting the clusters at height 12 would be a good idea.
+
+Cut the tree to 6 clusters, using the cutree() function
+
+```{r, fig.height=8, fig.width=14}
+plot(hc_fit)
+
+#Plot clusters being surrounded by a border, using the rect.hclust() function
+rect.hclust(hc_fit, k = 6, border = "red") 
+
+points_hc <- cutree(hc_fit, k = 6)
+
+#Store the clusters in a data frame along with the cereals data
+cereals_clusts_hc <- cbind(points_hc, Cerealdata_cont)
+
+#Have a look at the head of the new data frame
+colnames(cereals_clusts_hc)[1] <- "cluster_hc"
+head(cereals_clusts_hc)
+```
+
+
+
+### Part 2: Comment on differences between hierarchical Clustering and K-means.
+
+Let's run k-means algorithm and see what we get.
+```{r}
+set.seed(123)
+k3 <- kmeans(Cerealdata_cont, centers = 6, nstart = 25) # k = 3, number of restarts = 25
+
+# Visualize the output
+
+k3$centers # output the centers
+
+k3$size # Number of Universities in each cluster
+
+fviz_cluster(k3, data = Cerealdata_cont) # Visualize the output
+```
+
+In hierarchical clustering, looking at the dendograms, it gives us a much clear way of understanding how the clusters are linked and how the data points are related. But kmeans does not provide that kind of understanding.
+
+Hierarchical clustering (AGNES) starts with all the data points assigned to a cluster of their own. Then two nearest clusters are merged into the same cluster. In the end, this algorithm terminates when there is only a single cluster left.
+
+The decision of the no. of clusters that can best depict different groups can be chosen by observing the dendrogram. The best choice of the no. of clusters is the no. of vertical lines in the dendrogram cut by a horizontal line that can transverse the maximum distance vertically without intersecting a cluster.
+
+\newpage
+
+
+### Part 4: Comment on the structure of the clusters and on their stability. Hint: To check stability, partition the data and see how well clusters formed based on one part apply to the other part.
+
+Partition the data.
+```{r}
+#Divide the data into 60% training to cross verify.
+
+Cerealdata_cont1 <- as.data.frame(Cerealdata_cont)
+
+set.seed(123)
+#Divide data into 60% training.
+Index_Train<-createDataPartition(Cerealdata_cont1$fat, p=0.6, list=FALSE)
+Traindata <- Cerealdata_cont1[Index_Train, ]
+```
+
+Let's assign cluster values to the train data using hierarchical clustering.
+
+```{r}
+set.seed(123)
+dist_train <- dist(Traindata, method = "euclidean")
+hc_fit_train <- hclust(dist_train, method = "ward.D2")
+```
+
+Let's assign the cluster values to these data sets with number of clusters as 6.
+
+```{r}
+points_hc_train <- cutree(hc_fit_train, k = 6)
+
+# Store the clusters in a data frame along with the cereals data
+Traindata_clusts_hc <- cbind(points_hc_train, Traindata)
+
+# Have a look at the head of the new data frame
+colnames(Traindata_clusts_hc)[1] <- "cluster_hc"
+head(Traindata_clusts_hc)
+Traindata_clust <- data.frame(Traindata_clusts_hc)
+```
+\newpage
+
+ 
+```{r, fig.height=8, fig.width=14}
+
+plot(hc_fit_train)
+
+#Plot clusters being surrounded by a border, using the rect.hclust() function
+rect.hclust(hc_fit_train, k = 6, border = "red") 
+
+
+cereals_clust <- data.frame(cereals_clusts_hc)
+
+```
+By comparing the 2 dendograms, we can see that: 
+
+
+cereals in the cluster 1 of the complete dataset are the same as those of cluster 2 in the train dataset
+
+cereals in the cluster 2 of the complete dataset are the same as those of cluster 4 in the train dataset
+
+cereals in the cluster 3 of the complete dataset are the same as those of cluster 6 in the train dataset
+
+cereals in the cluster 4 of the complete dataset are the same as those of cluster 1 in the train dataset.
+
+cereals in the cluster 5 of the complete dataset are the same as those of cluster 5 in the train dataset.
+
+cereals in the cluster 6 of the complete dataset are the same as those of cluster 3 in the train dataset.
+
+We can see that the stability of clusters is same. Same cereals are grouped together in the same clusters.
+
+
+## Part 5: The elementary public schools would like to choose a set of cereals to include in their daily cafeterias. Every day a different cereal is offered, but all cereals should support a healthy diet. For this goal, you are requested to find a cluster of “healthy cereals.” Should the data be normalized? If not, how should they be used in the cluster analysis?
+
+```{r}
+
+# Now take means per group, this will give us the centroid values for all the clusters.
+centroids <- cereals_clust %>%
+        group_by(cluster_hc) %>%
+        summarise_all(funs(mean))
+
+centroids
+
+
+centroids$cluster_hc <- as.factor(centroids$cluster_hc)
+
+centroids
+
+ggparcoord(centroids,
+    columns = 2:16, groupColumn = 1, 
+    showPoints = TRUE,
+    title = "Parallel Coordinate Plot for Centroids of Cereal Dataset",
+    alphaLines = 0.3
+    ) +
+  scale_color_viridis(discrete=TRUE)+ 
+  coord_flip()
+```
+Looking at the above plot, cluster 1 seems to have healthy cereal options with low calories, high protein, high fiber, low fat, and low sodium.
+Normalisation just helps in getting a better understanding of the data. So irrespective of wheather we perform normalisation or not we should be able to understand what each cluster has to offer.
+
+\newpage
+
+### Quality of Clusters Created
+
+* Shiloutte width
+
+    - The silhouette width/value is a measure of how similar an object is to its own cluster (cohesion) compared to other clusters (separation)  [i.e., intra-cluster cohesion and inter-cluster separation]
+    - Ranges from -1 to +1  
+    - Values closer to 1 means higher quality of the cluster created 
+
+```{r}
+dist = daisy(x = Cerealdata_cont, metric = "euclidean")
+sil_value = silhouette(points_hc, dist = dist)
+plot(sil_value)
+```
+
+### Part 5: How do you compare hierarchical clustering and k-means? What are they main advantages of hierarchical clustering compared to k-means?
+
+There are quite a few differences between where to use K means and Hierarchical clustering. Majorly being on the basis of Scalability and Flexibility.
+
+Hierarchical is Flexible but can not be used on large data. K means is scalable but cannot use for flexible data.
+
+In Hierarchical Clustering, for large data set, you will not be able to clearly visualize the final output. You can still use this to check at which point the item was split into different categories. On the other hand, the K means is only applicable on only numeric data.
+
