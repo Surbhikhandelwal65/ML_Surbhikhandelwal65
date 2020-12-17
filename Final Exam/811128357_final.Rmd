@@ -1,0 +1,742 @@
+---
+title: |
+  | \vspace{4cm} \LARGE CRISA Customer Segmentation
+subtitle: |
+  Final Assignment
+author:
+  - Surbhi Khandelwal
+  - Machine Learning
+abstract:
+ - Customer Data Segmentation Using KMeans. Finding the best customer Segment for running Marketing Campaigns. And assigning success and failure against the customers for which we should run promotions and campaigns.
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: pdf_document
+header-includes: 
+  - \renewcommand{\and}{\\}
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo= TRUE)
+dir.create("images")
+```
+
+
+\newpage 
+\tableofcontents 
+\newpage 
+
+## I. Introduction 
+
+Project Introduction and Goal:
+
+CRISA is an Asian market research agency that specializes in tracking consumer purchase
+behavior in consumer goods (both durable and nondurable). To track purchase behavior, CRISA constituted household panels in over 100 cities and towns in India, covering most of the Indian urban market. A
+subset of 600 records is analyzed here. The strata were defined on the basis of socioeconomic
+status and the market (a collection of cities).
+
+CRISA would now like to segment the market based on two key sets of variables more directly related to the purchase process and to brand loyalty:
+
+
++ Purchase behavior (volume, frequency, susceptibility to discounts, and brand loyalty)
++ Basis of purchase (price, selling proposition)
+
+Doing so would allow CRISA to gain information about what demographic attributes are
+associated with different purchase behaviors and degrees of brand loyalty, and thus deploy
+promotion budgets more effectively.
+
+This project is aimed at determining at segmenting the customers on purchase behavior and basis of purchase and then suggesting how to target the various segments via advertisements.
+
+\newpage
+
+## II. Data Exploration
+
+We are using the historical dataset SoapData.csv to build our analysis. This dataset consists of 600 observations and around 46 variables which consists of:
+
+Demographic data like age, gender, education, no. of children, native language, eating habits, etc.
+
+Purchase behaviour data like No. of brands, brand runs, total volume, no. of transactions, value, etc.
+
+Basis of Purchase data like price categorywise purchase, selling propositions, etc.
+
+
+Missing Data Handling - There are quite a few customers whose data we don't have. For eg. SEX = 0, or education level is not between 1-9, etc. Many of the demographics are not specified across many of the some columns and since k-Means uses continuous variables, they are not important to the clustering algorithm.
+
+For this assignment I am leaving that data as it is, because I did not find these variables to be extremely important. If the value of a variable is NA or NULL, then we will handle those data for the 3 models seperately.
+
+
+
+Loading Packages
+
+Install packages that you need and call the libraries for them.
+
+```{r message=FALSE, comment=NA, warning=FALSE}
+library(tidyverse)  # data manipulation
+library(factoextra) # clustering algorithms & visualization
+library(ISLR)
+library(tidyr)
+library(caret)
+library(dplyr)
+library(flexclust)
+library(ggplot2)
+library(esquisse)
+library(hrbrthemes)
+library(GGally)
+library(viridis)
+library(corrplot)
+library(ggpubr)
+library(gmodels)
+library(e1071)
+library(FNN)
+library(fastDummies)
+
+```
+
+
+
+Loading the Dataset
+
+```{r}
+SoapData <- read.csv("C:\\Users\\akash\\Desktop\\Kent - !st Sem\\RPractice\\ML\\BathSoap.csv")
+
+summary(SoapData)
+
+```
+
+Preparing the Dataset
+
+```{r,  comment=NA}
+
+SoapData_df <- SoapData
+
+SoapData_df$Others.999 <- as.numeric(gsub("\\%", "", SoapData_df$Others.999))
+SoapData_df$Pur.Vol.No.Promo.... <- as.numeric(gsub("\\%", "", SoapData_df$Pur.Vol.No.Promo....))
+SoapData_df$Pur.Vol.Promo.6.. <- as.numeric(gsub("\\%", "", SoapData_df$Pur.Vol.Promo.6..))
+SoapData_df$Pur.Vol.Other.Promo.. <- as.numeric(gsub("\\%", "", SoapData_df$Pur.Vol.Other.Promo..))
+SoapData_df$Pr.Cat.1 <- as.numeric(gsub("\\%", "", SoapData_df$Pr.Cat.1))
+SoapData_df$Pr.Cat.2 <- as.numeric(gsub("\\%", "", SoapData_df$Pr.Cat.2))
+SoapData_df$Pr.Cat.3 <- as.numeric(gsub("\\%", "", SoapData_df$Pr.Cat.3))
+SoapData_df$Pr.Cat.4 <- as.numeric(gsub("\\%", "", SoapData_df$Pr.Cat.4))
+SoapData_df$PropCat.5 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.5))
+SoapData_df$PropCat.6 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.6))
+SoapData_df$PropCat.7 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.7))    
+SoapData_df$PropCat.8 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.8))
+SoapData_df$PropCat.9 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.9))
+SoapData_df$PropCat.10 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.10))
+SoapData_df$PropCat.11 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.11))
+SoapData_df$PropCat.12 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.12))
+SoapData_df$PropCat.13 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.13))
+SoapData_df$PropCat.14 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.14))
+SoapData_df$PropCat.15 <- as.numeric(gsub("\\%", "", SoapData_df$PropCat.15))
+
+
+
+# Get the actual Volume rather than the percentage number.
+SoapData_df$Others.999 <- (SoapData_df$Others.999*SoapData_df$Total.Volume)/100
+SoapData_df$Pur.Vol.No.Promo.... <- (SoapData_df$Pur.Vol.No.Promo....*SoapData_df$Total.Volume)/100
+SoapData_df$Pur.Vol.Promo.6.. <- (SoapData_df$Pur.Vol.Promo.6..*SoapData_df$Total.Volume)/100
+SoapData_df$Pur.Vol.Other.Promo.. <- (SoapData_df$Pur.Vol.Other.Promo..*SoapData_df$Total.Volume)/100
+SoapData_df$Pr.Cat.1 <- (SoapData_df$Pr.Cat.1*SoapData_df$Total.Volume)/100
+SoapData_df$Pr.Cat.2 <- (SoapData_df$Pr.Cat.2*SoapData_df$Total.Volume)/100
+SoapData_df$Pr.Cat.3 <- (SoapData_df$Pr.Cat.3*SoapData_df$Total.Volume)/100
+SoapData_df$Pr.Cat.4 <- (SoapData_df$Pr.Cat.4*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.5 <- (SoapData_df$PropCat.5*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.6 <- (SoapData_df$PropCat.6*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.7 <- (SoapData_df$PropCat.7*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.8 <- (SoapData_df$PropCat.8*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.9 <- (SoapData_df$PropCat.9*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.10 <- (SoapData_df$PropCat.10*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.11 <- (SoapData_df$PropCat.11*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.12 <- (SoapData_df$PropCat.12*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.13 <- (SoapData_df$PropCat.13*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.14 <- (SoapData_df$PropCat.14*SoapData_df$Total.Volume)/100
+SoapData_df$PropCat.15 <- (SoapData_df$PropCat.15*SoapData_df$Total.Volume)/100
+
+
+```
+
+Data Exploration
+
+
+```{r, warning=FALSE, echo=FALSE, comment=NA}
+SoapData_df[, 2:10] %>% 
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red", stat = "count") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+```
+
+Looking at this data, we can see that most of the customers were 
+
++ age level is 3 and 4. 
+
++ no. of children is 4 and then 2
+
++ Most of them have Television
+
++ Education level is average at levels 4 and 5 mostly
+
++ Eating Habits is mostly either veg or non-veg
+
++ No. of people in the household is between 3 to 6 
+
++ Native language was 10
+
++ socioeconomic level is evenly distributed 
+
++ Most of the shoppers are females.
+
+```{r, warning=FALSE, echo=FALSE, comment=NA}
+SoapData_df[, 11:22] %>% 
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+```
+Affluence.index, avg_price, num_trans look to be normally distributed. 
+
++ Affluence.index has many 0's which looks like missing values. If we use this variable then we will deal with it accordingly. 
+
++ A few of the variables seem to be negatively skewed.
+
+
+
+Looking at a few Interrelated Relationships
+
+
+  Let's look at the relation between Socioeconomic level and Total Value.
+```{r, echo=FALSE, fig.show="hold", out.width="50%"}
+ggboxplot(SoapData, x = "SEC", y = "Value",
+          color = "SEC")
+```
+
+
+  We can see here that irrespective of the Socioeconomic level, customers spend the almost similar amount of money.
+
+
+
+
+  Let's look at the relation between Socioeconomic level and Average price of purchase.
+```{r, echo=FALSE, fig.show="hold", out.width="50%"}
+ggboxplot(SoapData, x = "SEC", y = "Avg..Price",
+          color = "SEC")
+```
+
+
+  Now we can see a difference. Higher the socioeconomic level, higher is the avg. price of purchase.
+
+
+\newpage
+
+## III Model Building
+
+### a. The variables that describe purchase behavior (including brand loyalty)
+
+For brand loyalty indicators, we have data on 
+
++ percent of purchases devoted to major brands 
+
++ a catch-all variable for percent of purchases devoted to other smaller brands (to reduce complexity of analysis) - Others.999, and 
+
++ a derived variable that indicates the maximum share devoted to any one brand - max.brand.ind 
+
+
+Since CRISA is compiling this data for general marketing use, and not on behalf of one particular brand, we can say a customer who is fully devoted to brand A is similar to a customer fully devoted to brand B - both are fully loyal customers in their behavior. But if we include all the brand shares in the clustering, the analysis will treat those two customers as very different. 
+
+So we will use only the derived variable for maximum purchase share for a brand, any brand, ie. "max.brand.ind" and the "other999" along with the purchase information.
+
+So the columns we will be using for this analysis are:
+
+- Average Price
+
+- Brand Runs
+
+- No. of transactions
+
+- No. of Brands
+
+- Other999
+
+- Total Volume
+
+- Value
+
+- Max.brand.ind
+
+Let's store the above variables in one dataset
+```{r purchasebehaviour}
+
+# Building a dataset that has all the variables needed to describe purchase behaviours including brand loyalty.
+
+purbehdf <- SoapData_df[, c(12:19,31)]
+purbehdf <- purbehdf[,-6]
+
+# Finding the max value for each of the brands for brand loyalty.
+
+purbehdf$Max.brand.ind <-apply(SoapData_df[,23:30], MARGIN=1, FUN=max)
+
+
+purbehdf$Max.brand.ind <- as.numeric(gsub("\\%", "", purbehdf$Max.brand.ind))
+
+purbehdf$Max.brand.ind <- (purbehdf$Max.brand.ind*SoapData_df$Total.Volume)/100
+
+
+# Adding the max.brand.ind to the dataset.
+
+SoapData_df <- cbind(SoapData_df, purbehdf$Max.brand.ind)
+purchasebeh <- purbehdf
+
+# Now let's just look at the final dataset before moving ahead with the actual KMeans.
+
+head(purchasebeh)
+```
+
+#### Scaling the Data
+
+  
+  I am scaling the entire dataset without dividing it into train and test because it's an unsupervised model. Since we won't be able to automatically calculate the accuracy/effectiveness of your model. We can only calculate the distance value and understand how our model is doing.
+
+```{r comments=NA}
+# Scaling the data frame (z-score) 
+purchasebeh_scaled <- scale(purchasebeh)
+```
+
+#### Handling missing records.
+
+
+```{r comments=NA}
+# Let's look at the percentage of missing values for each variable in the dataset.
+
+navalues<- colMeans(is.na(purchasebeh_scaled))*100
+as.data.frame(navalues)
+
+```
+
+
+There are no missing values that we need to handle or manage in the dataset. That's great!
+
+#### Getting the distance.
+
+```{r}
+
+distance <- get_dist(purchasebeh_scaled)
+#fviz_dist(distance)
+```
+\newpage
+
+#### K Means Implementation
+
+
+#### Determining the optimum value of k using wss method.
+
+WSS Method
+```{r comments=NA}
+
+fviz_nbclust(purchasebeh_scaled, kmeans, method = "wss")
+```
+
+Optimal Value of K=3. Meaning our data can be easily put into 3 clusters. This should align well with loyal customers, completely unloyal customers and others. 
+
+
+Silhouette Method
+
+```{r}
+set.seed(123)
+fviz_nbclust(purchasebeh_scaled, kmeans, method = "silhouette")
+```
+
+Even Accoring to this method, Optimal k=2. 
+But I feel that with our purpose it ll be better to go with k=3. As this aligns well with loyal customers, completely disloyal customers and others. So let's cluster the data and analyze our clusters. 
+
+\newpage
+
+#### Running K-Means for Optimal k=3
+```{r}
+set.seed(123)
+kopt <- kmeans(purchasebeh_scaled, centers = 3, nstart = 25) # k = 3, number of restarts = 25
+
+# Visualize the output
+
+kopt$centers # output the centers
+
+kopt$size # Number of Universities in each cluster
+
+fviz_cluster(kopt, data = purchasebeh_scaled) # Visualize the output
+```
+\newpage
+
+### Determing The Meaning of The Clusters.
+
+```{r, warning=FALSE, echo=FALSE}
+
+ClusterMeanbeh <- kopt$centers
+clusterval2 <- c(1,2,3)
+clusterval2 <- as.factor(clusterval2)
+
+
+tempcluster2 <- cbind(clusterval2,ClusterMeanbeh)
+
+ggparcoord(tempcluster2, columns = 2:10, groupColumn = 1,
+    title = "Plot for All The Variables For an Overview"
+    ) + coord_flip()
+```
+
+Cluster 1 (Sometimes use other brands, but overall high Brand Loyalty - Mostly Loyal Customers of Low-End Brands) - 76 Low average price, low no. of transactions, low no. of brands, high total volume, high value, vol.trans is also high, sometimes use other brands but high brand loyalty.
+
+
+
+Cluster 2 (High Brand Loyalty with High Avg Price - Loyal Customers of Pricey Brands) - 330 - High avg price, low no of brand runs, low no. of transactions, low no. of brands, total volume is low, and value is also low, they rarely try other brands.
+
+
+Cluster 3 ( Low Brand Loyalty) - 194 High avg price, high no of brand runs, no of transactions, total volume is average, value is average, Volume per transaction is low, they try different brands.
+
+
+
+
+
+\newpage
+
+
+### b. The variables that describe the basis for purchase.
+
+The variables that I have used for describing basis for purchase are:
+
+- Pur.Vol.No.Promo...., 
+
+- Pur.Vol.Promo.6.., 
+
+- Pur.Vol.Other.Promo.., 
+
+- Pr.Cat.1,
+
+- Pr.Cat.2,
+
+- Pr.Cat.3,
+
+- Pr.Cat.4,
+
+- PropCat.5 , ..to.. PropCat.15
+
+
+Building a dataset that has all the variables needed to describe basis for purchase.
+```{r}
+
+purchasedf <- SoapData_df[,c(20:22,32:46)]
+
+# Now let's look at the dataset
+
+head(purchasedf)
+```
+
+#### Scaling the Data
+
+```{r comments=NA}
+# Scaling the data frame (z-score) 
+purchase_scaled <- scale(purchasedf)
+```
+
+Let's check if there are any missing values in the dataset.
+
+```{r comments=NA}
+# Let's look at the percentage of missing values for each variable in the dataset.
+
+navalues<- colMeans(is.na(purchase_scaled))*100
+as.data.frame(navalues)
+
+```
+
+Again, there are no missing values. So let's proceed.
+
+#### Getting the distance.
+
+```{r}
+
+distance <- get_dist(purchase_scaled)
+```
+
+
+Silhouette Method
+
+```{r}
+fviz_nbclust(purchase_scaled, kmeans, method = "silhouette")
+```
+
+We see that the optimal K value is 2. The two clusters could be - customers who don't rely on any promotions or selling propositions, those who highly rely on promotions.
+
+#### K Means Implementation
+
+
+Running K-Means for k=2 as that looks like the optimal value of k.
+
+```{r}
+set.seed(123)
+k2p <- kmeans(purchase_scaled, centers = 2, nstart = 25) 
+
+# Visualize the output
+
+k2p$centers # output the centers
+
+k2p$size # Number of Customers in each cluster
+
+fviz_cluster(k2p, data = purchase_scaled) # Visualize the output
+```
+\newpage
+
+### Determining the Meaning of the clusters.
+```{r , warning=FALSE, echo=FALSE}
+
+ClusterMeanPur <- k2p$centers
+clusterval1 <-c(1,2)
+clusterval1 <- as.factor(clusterval1)
+
+
+tempcluster1 <- cbind(clusterval1,ClusterMeanPur)
+
+ggparcoord(tempcluster1,columns = 2:19, groupColumn = 1,
+    title = "Plot for All The Variables For an Overview"
+    ) + coord_flip()
+```
+
+The two clusters are well separated across most variables. 
+
+Cluster 1 (60 ) - purchases without needing promotional offers, likes pricing category 3, and is somewhat responsive to selling propositions 6,9, and 14.
+
+Cluster 2 (540) - Believe in promotions, high Pr.Cat.1,2 and 4. PropCat5, 7,8,10,11,12,13,and 15.
+
+\newpage
+
+### c. The variables that describe both purchase behavior and basis of purchase
+
+```{r complete}
+
+# We already have the scaled datasets for both the databases, so let's just combine them to form the tables.
+
+completedf <- cbind(purchasebeh_scaled, purchase_scaled)
+
+head(completedf)
+```
+
+#### Getting the distance.
+
+```{r}
+
+distance <- get_dist(completedf)
+```
+
+#### Determining the optimum value of k 
+
+wss method.
+```{r comments=NA}
+
+fviz_nbclust(completedf, kmeans, method = "wss")
+```
+Optimal Value of K=2. Meaning our data can be easily put into 2 clusters ie. customers are brand loyal or not. 
+
+
+Silhouette Method
+
+```{r}
+fviz_nbclust(completedf, kmeans, method = "silhouette")
+```
+#### K Means Implementation
+
+
+Running K-Means for k=2
+
+```{r}
+set.seed(123)
+kcom <- kmeans(completedf, centers = 2, nstart = 25) 
+
+# Visualize the output
+
+kcom$centers # output the centers
+
+kcom$size # Number of Customers in each cluster
+
+fviz_cluster(kcom, data =completedf) # Visualize the output
+```
+\newpage
+
+### Determining the Meaning of the clusters.
+```{r , warning=FALSE, echo=FALSE}
+
+ClusterMeanAna <- kcom$centers
+clusterval <-c(1,2)
+clusterval <- as.factor(clusterval)
+
+
+tempcluster <- cbind(clusterval,ClusterMeanAna)
+
+ggparcoord(tempcluster,columns = 2:28, groupColumn = 1,
+    title = "Plot for All The Variables For an Overview"
+    ) + coord_flip()
+```
+The clusters are pretty segregated.
+
+
+Cluster 1 (145) Look to offers and promotions, not brand loyal. -  people who buy low value soaps, they buy often, they look at deals and discounts.
+
+
+Cluster 2 (455) - Don't believe in offers and discounts and loyal to high-end brands. - people that buy pricey soaps and have less no of transactions, less volume of transactions.
+
+
+
+\newpage
+
+## IV. Selecting The Best Segmentation.
+
+Comment on the characteristics (demographic, brand loyalty, and basis for purchase) of these clusters. 
+
+
+I believe that the segmentation based on basis of purchase is of importance.
+
+This segmentation gives us two clusters which are well separated across most variables. 
+
+Cluster 1 (60 ) - purchases without needing promotional offers, likes pricing category 3, and is somewhat responsive to selling propositions 6,9, and 14.
+
+Cluster 2 (540) - Believe in promotions, high Pr.Cat.1,2 and 4. PropCat5, 7,8,10,11,12,13,and 15.
+
+This shows that a huge number of customers are looking at deals and promotions, so it will do us good to understand the demographics of these people and present them with campaigns and promotions that drive them to buy.
+
+#### Let's look at the various charachteristics:
+
+```{r, echo=FALSE}
+
+
+SoapData_clusters <- data.frame(SoapData_df,
+  cluster = as.factor(k2p$cluster)
+)
+
+SoapData_clusters_1 <- SoapData_clusters %>% filter(cluster==1) 
+SoapData_clusters_2 <- SoapData_clusters %>% filter(cluster==2)
+
+```
+#### Looking at demographic data
+
+
+Cluster 1:
+
+```{r,echo=FALSE, fig.show="hold", out.width="80%", warning=FALSE, comment=NA}
+
+SoapData_clusters_1[, 2:10] %>%  
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+```
+
+
+Most of the shopping is done by females. Socioeconomic level is mostly high. Native language is generally 10, Education level is either very little or average. No. of people is the household is 4-5, so nuclear families. Eating habits are mostly non-veg. Age is higher under level 4. No. of children is also 2-4. Some of them do not have television.
+
+Cluster 2:
+
+```{r ,echo=FALSE, fig.show="hold", out.width="80%", , warning=FALSE, comment=NA}
+
+SoapData_clusters_2[, 2:10] %>%  
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+
+```
+
+
+
+Most of the shopping is done by females. Socioeconomic level is evenly distributed across all levels. Native language is generally 10, Education level is average and higher. No. of people is the household is 5-6. Eating habits are mostly veg and non-veg. Age is higher under level 4 but also includes level 3. No. of children is also 2-4. Most of them have television.
+
+
+
+Let's look at Brand Loyalty Charachteristcs:
+
+Cluster 1:
+```{r echo=FALSE, fig.show="hold", out.width="80%", , warning=FALSE, comment=NA}
+
+SoapData_clusters_1[, c(12:19,31,47)] %>%  
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+```
+No. of Brands used is pretty less 2-3. Average Volume per transaction is spread out but peaks on the average. Others.999 is low suggesting they are very loyal to their brand. Average price is pretty spread out. 
+
+
+Cluster 2:
+```{r echo=FALSE, fig.show="hold", out.width="80%", , warning=FALSE, comment=NA}
+
+SoapData_clusters_2[, c(12:19,31,47)] %>%  
+  gather(key = Variable, value = Value) %>% 
+  ggplot() +
+    geom_histogram(aes(x = Value), fill = "red") +
+    facet_wrap(~Variable, scales='free') +
+    theme_classic() +
+    theme(aspect.ratio = 0.5, axis.title = element_blank())
+```
+
+No. of Brands used is on the higher side 3-4+. Average Volume per transaction is on the lower side. Others.999 is spread out a little. Max.brand.ind is low suggesting they don't stick with any specif brand. Average price is on the lower end. 
+
+\newpage
+
+## V. Model To Classify Data into Success and Failure.
+
+Develop a model that classifies the data into these segments. Since this information would most likely be used in targeting direct-mail promotions, it would be useful to select a market segment that would be defined as a success in the classification model.
+
+
+We will create a logistic regression model that will help predict if a customer belongs to cluster 2 on the basis of the demographic data of the customers in cluster 2 and will help us decide if we  should advertise to that customer or not basically giving us success or failure for running promotional campaigns.
+
+
+```{r , warning=FALSE, comment=NA}
+
+# Preparing the dataset
+
+cluster_val <- k2p$cluster
+Soapdata_result <- cbind(SoapData_df, cluster_val)
+
+
+Soapdata_result[, 49:51] <- dummy_cols(Soapdata_result$cluster_val)
+
+# Partition data 60% train and 40% validation
+
+set.seed(123)
+Valid_Index = createDataPartition(Soapdata_result$Brand.Runs,p=0.4, list=FALSE) # 40% reserved for Validation
+Valid_Data = Soapdata_result[Valid_Index,]
+Train_Data = Soapdata_result[-Valid_Index,] # Validation and Training data is rest
+
+# Choosing variables based on demographics and a few decisive variables that put customers in cluster 1 like Pr.Cat.3 and Pur.Vol.No.Promo. 
+
+# Applying logistic regression model 
+modelreg <- glm(formula = .data_1 ~  SEC+ MT + FEH + SEX + AGE+ EDU + HS + CHILD + CS +  Pr.Cat.3 + Pur.Vol.No.Promo...., family = binomial, data = Train_Data)
+
+
+predict_validation<-predict(modelreg, newdata = Valid_Data, type='response')
+```
+
+
+## Categorizing the result based on the cutoff value(0.5)
+```{r}
+
+resultval <-as.factor(ifelse(predict_validation > 0.5, 1, 0))
+
+CrossTable(x=Valid_Data$.data_1,y=resultval, prop.chisq = FALSE)
+```
+
+This matrix shows the following: 0 is Success , then the misclassifications are 4 false positives, and 21 false negatives. We can identify several measures based on this table. For example
+
+* Accuracy = Number correctly identified / Total = (21 + 216) / 242 = .98
+* Recall is the true positive rate or sensitivity = 21/21+ 1 = .95
+* Precision is the positive predictive value = 21 / (21 + 4) = 0.84
+* Specificity, also called as the true negative rate = 216 / 217 = .99
+
+In simple terms, No. of customers correctly identified is pretty high with an accuracy of 0.98. 
+
+High precision means that an algorithm returned substantially more relevant (positive) results than irrelevant (negative) ones, while high recall means that an algorithm returned most of the relevant (positive) results. 
+
+So Now using the predict function of this model, we can help people at CRISA/a marketing company to understand if they should run advertisement or give promotions and discounts to a specific customer or if the customer would buy the product anyways.
